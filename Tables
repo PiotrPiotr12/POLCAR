@@ -1,0 +1,49 @@
+CREATE TABLE Tenants (
+    TenantID INT IDENTITY(1,1) PRIMARY KEY,
+    TenantName NVARCHAR(255) NOT NULL
+);
+GO
+CREATE TABLE Users (
+    UserID INT IDENTITY(1,1) PRIMARY KEY,
+    TenantID INT,
+    Username NVARCHAR(255) NOT NULL,
+    PasswordHash NVARCHAR(255) NOT NULL,
+    IsManager BIT DEFAULT 0,
+    ManagerID INT NULL,
+    FOREIGN KEY (TenantID) REFERENCES Tenants(TenantID)
+);
+GO
+CREATE TABLE Tasks (
+    TaskID INT IDENTITY(1,1) PRIMARY KEY,
+    Title NVARCHAR(255) NOT NULL,
+    Priority NVARCHAR(50) NOT NULL,
+    Description NVARCHAR(MAX),
+    AssignedTo INT,
+    FOREIGN KEY (AssignedTo) REFERENCES Users(UserID)
+);
+GO
+CREATE TABLE TaskHistory (
+    HistoryID INT IDENTITY(1,1) PRIMARY KEY,
+    TaskID INT,
+    UserID INT,
+    ChangeDate DATETIME DEFAULT GETDATE(),
+    OperationType NVARCHAR(10),
+    OldTitle NVARCHAR(255),
+    OldPriority NVARCHAR(50),
+    OldDescription NVARCHAR(MAX),
+    NewTitle NVARCHAR(255),
+    NewPriority NVARCHAR(50),
+    NewDescription NVARCHAR(MAX),
+    FOREIGN KEY (TaskID) REFERENCES Tasks(TaskID),
+    FOREIGN KEY (UserID) REFERENCES Users(UserID)
+);
+GO
+CREATE TABLE TaskShares (
+    TaskID INT,
+    SharedWith INT,
+    ShareDate DATETIME DEFAULT GETDATE(),
+    PRIMARY KEY (TaskID, SharedWith),
+    FOREIGN KEY (TaskID) REFERENCES Tasks(TaskID),
+    FOREIGN KEY (SharedWith) REFERENCES Users(UserID)
+);
+GO
