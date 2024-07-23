@@ -1,0 +1,34 @@
+CREATE CLUSTERED INDEX IX_Tasks_TaskID
+ON Tasks (TaskID);
+GO
+
+CREATE NONCLUSTERED INDEX IX_Tasks_AssignedTo
+ON Tasks (AssignedTo);
+GO
+
+CREATE NONCLUSTERED INDEX IX_Tasks_Title_Priority
+ON Tasks (Title, Priority);
+GO
+CREATE NONCLUSTERED INDEX IX_TaskHistory_TaskID
+ON TaskHistory (TaskID);
+GO
+
+CREATE NONCLUSTERED INDEX IX_TaskHistory_UserID_ChangeDate
+ON TaskHistory (UserID, ChangeDate);
+GO
+CREATE NONCLUSTERED INDEX IX_Users_ManagerID
+ON Users (ManagerID);
+GO
+
+CREATE NONCLUSTERED INDEX IX_Users_TenantID_IsManager
+ON Users (TenantID, IsManager);
+GO
+CREATE NONCLUSTERED INDEX IX_Tenants_TenantName
+ON Tenants (TenantName);
+GO
+CREATE NONCLUSTERED INDEX IX_TaskShares_TaskID
+ON TaskShares (TaskID);
+GO
+
+CREATE NONCLUSTERED INDEX IX_TaskShares_SharedWith
+ON TaskShares (SharedWith)
