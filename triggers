@@ -1,0 +1,62 @@
+CREATE TRIGGER trgTasks_AUD
+ON Tasks
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT * FROM inserted)
+    BEGIN
+        IF EXISTS (SELECT * FROM deleted)
+        BEGIN
+            -- UPDATE
+            INSERT INTO TaskHistory (TaskID, UserID, ChangeDate, OperationType, OldTitle, OldPriority, OldDescription, NewTitle, NewPriority, NewDescription)
+            SELECT 
+                d.TaskID, 
+                d.AssignedTo, 
+                GETDATE(), 
+                'UPDATE', 
+                d.Title, 
+                d.Priority, 
+                d.Description, 
+                i.Title, 
+                i.Priority, 
+                i.Description
+            FROM 
+                inserted i
+            JOIN 
+                deleted d ON i.TaskID = d.TaskID;
+        END
+        ELSE
+        BEGIN
+            -- INSERT
+            INSERT INTO TaskHistory (TaskID, UserID, ChangeDate, OperationType, NewTitle, NewPriority, NewDescription)
+            SELECT 
+                i.TaskID, 
+                i.AssignedTo, 
+                GETDATE(), 
+                'INSERT', 
+                i.Title, 
+                i.Priority, 
+                i.Description
+            FROM 
+                inserted i;
+        END
+    END
+    ELSE
+    BEGIN
+        -- DELETE
+        INSERT INTO TaskHistory (TaskID, UserID, ChangeDate, OperationType, OldTitle, OldPriority, OldDescription)
+        SELECT 
+            d.TaskID, 
+            d.AssignedTo, 
+            GETDATE(), 
+            'DELETE', 
+            d.Title, 
+            d.Priority, 
+            d.Description
+        FROM 
+            deleted d;
+    END
+END;
+GO
