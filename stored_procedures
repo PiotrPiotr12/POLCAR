@@ -1,0 +1,235 @@
+CREATE PROCEDURE AddEmployeesAndManagers
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @i INT = 1;
+    DECLARE @j INT = 1;
+
+    -- Add Managers
+    WHILE @i <= 10
+    BEGIN
+        INSERT INTO Users (TenantID, Username, PasswordHash, IsManager)
+        VALUES (1, 'Manager' + CAST(@i AS NVARCHAR(10)), HASHBYTES('SHA2_256', 'password'), 1);
+        SET @i = @i + 1;
+    END
+
+    -- Add Employees
+    WHILE @j <= 1000
+    BEGIN
+        INSERT INTO Users (TenantID, Username, PasswordHash, IsManager, ManagerID)
+        VALUES (1, 'Employee' + CAST(@j AS NVARCHAR(10)), HASHBYTES('SHA2_256', 'password'), 0, ((@j - 1) / 100) + 1);
+        SET @j = @j + 1;
+    END
+END;
+GO
+CREATE PROCEDURE AddTasksForEachEmployee
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO Tasks (Title, Priority, Description, AssignedTo)
+    SELECT 
+        'Task ' + CAST(Numbers.N AS NVARCHAR(10)) + ' for Employee ' + CAST(Users.UserID AS NVARCHAR(10)) AS Title,
+        CASE WHEN Numbers.N % 3 = 0 THEN 'High'
+             WHEN Numbers.N % 3 = 1 THEN 'Medium'
+             ELSE 'Low' END AS Priority,
+        'Description for Task ' + CAST(Numbers.N AS NVARCHAR(10)) + ' for Employee ' + CAST(Users.UserID AS NVARCHAR(10)) AS Description,
+        Users.UserID AS AssignedTo
+    FROM 
+        Users
+    CROSS JOIN 
+        (SELECT TOP (1000) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS N
+         FROM master.dbo.spt_values) AS Numbers
+    WHERE 
+        Users.IsManager = 0;
+END;
+GO
+CREATE PROCEDURE UpdateTask
+    @TaskID INT,
+    @UserID INT,
+    @Title NVARCHAR(255),
+    @Priority NVARCHAR(50),
+    @Description NVARCHAR(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE Tasks
+    SET Title = @Title,
+        Priority = @Priority,
+        Description = @Description
+    WHERE TaskID = @TaskID AND AssignedTo = @UserID;
+    
+    IF @@ROWCOUNT = 0
+    BEGIN
+        PRINT 'Error: Task not found or user not authorized to edit this task.';
+    END
+    ELSE
+    BEGIN
+        PRINT 'Task updated successfully.';
+    END
+END;
+GO
+CREATE PROCEDURE GetTasksAndHistoryForManager
+    @ManagerID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT 
+        t.TaskID, 
+        t.Title, 
+        t.Priority, 
+        t.Description, 
+        t.AssignedTo,
+        NULL AS ChangeDate,
+        NULL AS OperationType,
+        NULL AS OldTitle,
+        NULL AS OldPriority,
+        NULL AS OldDescription,
+        NULL AS NewTitle,
+        NULL AS NewPriority,
+        NULL AS NewDescription
+    FROM 
+        Tasks t
+    INNER JOIN 
+        Users u ON t.AssignedTo = u.UserID
+    WHERE 
+        u.ManagerID = @ManagerID
+
+    UNION ALL
+
+    SELECT 
+        th.TaskID, 
+        NULL AS Title,
+        NULL AS Priority,
+        NULL AS Description,
+        NULL AS AssignedTo,
+        th.ChangeDate,
+        th.OperationType,
+        th.OldTitle,
+        th.OldPriority,
+        th.OldDescription,
+        th.NewTitle,
+        th.NewPriority,
+        th.NewDescription
+    FROM 
+        TaskHistory th
+    INNER JOIN 
+        Users u ON th.UserID = u.UserID
+    WHERE 
+        u.ManagerID = @ManagerID
+    
+    UNION ALL
+
+    SELECT
+        t.TaskID,
+        t.Title,
+        t.Priority,
+        t.Description,
+        t.AssignedTo,
+        ts.ShareDate AS ChangeDate,
+        'Shared' AS OperationType,
+        NULL AS OldTitle,
+        NULL AS OldPriority,
+        NULL AS OldDescription,
+        NULL AS NewTitle,
+        NULL AS NewPriority,
+        NULL AS NewDescription
+    FROM
+        Tasks t
+    INNER JOIN
+        TaskShares ts ON t.TaskID = ts.TaskID
+    INNER JOIN
+        Users u ON ts.SharedWith = u.UserID
+    WHERE
+        u.ManagerID = @ManagerID;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        PRINT 'No tasks or changes found for your employees.';
+    END
+END;
+GO
+CREATE PROCEDURE ShareTask
+    @TaskID INT,
+    @UserID INT,
+    @ShareWith INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM Tasks WHERE TaskID = @TaskID AND AssignedTo = @UserID)
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM TaskShares WHERE TaskID = @TaskID AND SharedWith = @ShareWith)
+        BEGIN
+            INSERT INTO TaskShares (TaskID, SharedWith)
+            VALUES (@TaskID, @ShareWith);
+
+            PRINT 'Task shared successfully.';
+        END
+        ELSE
+        BEGIN
+            PRINT 'Task is already shared with the specified user.';
+        END
+    END
+    ELSE
+    BEGIN
+        PRINT 'Error: User is not authorized to share this task.';
+    END
+END;
+GO
+CREATE PROCEDURE UnshareTask
+    @TaskID INT,
+    @UserID INT,
+    @UnshareWith INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM Tasks WHERE TaskID = @TaskID AND AssignedTo = @UserID)
+    BEGIN
+        IF EXISTS (SELECT 1 FROM TaskShares WHERE TaskID = @TaskID AND SharedWith = @UnshareWith)
+        BEGIN
+            DELETE FROM TaskShares WHERE TaskID = @TaskID AND SharedWith = @UnshareWith;
+
+            PRINT 'Task unshared successfully.';
+        END
+        ELSE
+        BEGIN
+            PRINT 'Task is not shared with the specified user.';
+        END
+    END
+    ELSE
+    BEGIN
+        PRINT 'Error: User is not authorized to unshare this task.';
+    END
+END;
+GO
+CREATE PROCEDURE GetMyTasksAndSharedTasks
+    @UserID INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        t.TaskID,
+        t.Title,
+        t.Priority,
+        t.Description,
+        t.AssignedTo,
+        ts.SharedWith,
+        ts.ShareDate
+    FROM
+        Tasks t
+    LEFT JOIN
+        TaskShares ts ON t.TaskID = ts.TaskID AND ts.SharedWith = @UserID
+    WHERE
+        t.AssignedTo = @UserID OR ts.SharedWith = @UserID;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        PRINT 'No tasks assigned or shared with you.';
+    END
+END
