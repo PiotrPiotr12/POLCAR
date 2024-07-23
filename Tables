@@ -45,5 +45,4 @@ CREATE TABLE TaskShares (
     PRIMARY KEY (TaskID, SharedWith),
     FOREIGN KEY (TaskID) REFERENCES Tasks(TaskID),
     FOREIGN KEY (SharedWith) REFERENCES Users(UserID)
-);
-GO
+)
